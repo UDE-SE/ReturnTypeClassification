@@ -11,3 +11,6 @@
 ## Inference / Analysis
 1. Analyse single method names or existing repositories ([example how to use both models](https://huggingface.co/spaces/UDE-SE/ReturnTypePredictor/blob/main/app.py))
 2. Check out our [HuggingFace Space](https://huggingface.co/spaces/UDE-SE/ReturnTypePredictor) to see the models running
+
+## License
+This Space is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike (CC BY-NC-SA) 4.0 International License](https://creativecommons.org/licenses/by-nc-sa/4.0/).
