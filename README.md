@@ -3,7 +3,7 @@
 ## Create Data Set and Training
 1. Download source files from [CodeSearchNet Challenge](https://github.com/github/CodeSearchNet)
 2. Create HuggingFace Dataset [create_dataset.py](create_dataset.py)
-3. Train models [BERTForReturnTypeClassification](train_BERTForReturnTypeClassification) and [SantaCoderForReturnTypeClassification](train_SantaCoderForReturnTypeClassification)
+3. Train models [BERTForReturnTypeClassification](train_BERTForReturnTypeClassification.py) and [SantaCoderForReturnTypeClassification](train_SantaCoderForReturnTypeClassification.py)
     
 ## Existing Models   
 1. Use trained models from HuggingFace [BERTForReturnTypeClassification](https://huggingface.co/UDE-SE/BERTForReturnTypeClassification) and [SantaCoderForReturnTypeClassification](https://huggingface.co/UDE-SE/SantaCoderForReturnTypeClassification)
