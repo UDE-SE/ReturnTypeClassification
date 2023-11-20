@@ -9,7 +9,7 @@ import os
 sys.path.append(os.path.abspath('..'))
 from focalloss import *
 
-selected_return_types = ['None', 'number', 'boolean', 'string', 'object', 'collection']
+selected_return_types = ['None', 'Number', 'Boolean', 'String', 'Object', 'Collection']
 device = torch.device("cuda:0")
 
 def split_name_to_sentence(example):

@@ -1,20 +1,23 @@
+from transformers import  RobertaTokenizer, RobertaForSequenceClassification, DataCollatorWithPadding, Trainer, TrainingArguments
 import torch
-from transformers import Trainer, AutoTokenizer, DataCollatorWithPadding, TrainingArguments
 from datasets import load_from_disk
+import re
 
-from custom_model import SantaCoderClassification
+import sys
+import os
 
+sys.path.append(os.path.abspath('..'))
 from focalloss import *
 
-selected_return_types = ['None', 'number', 'boolean', 'string', 'object', 'collection']
+selected_return_types = ['None', 'Number', 'Boolean', 'String', 'Object', 'Collection']
 device = torch.device("cuda:0")
 
 class CustomTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs.get("labels")
         # forward pass
-        old_loss, logits = model(**inputs)
-        
+        outputs = model(**inputs)
+        logits = outputs.get('logits')
         # compute custom loss
         class_weights = torch.tensor([1/(56753/191712), 1/(10646/191712), 1/(13755/191712), 1/(14766/191712), 1/(90419/191712), 1/(5363/191712)])
         class_weights = class_weights.to(device)
@@ -26,31 +29,31 @@ class CustomTrainer(Trainer):
 
 dataset = load_from_disk("methods_with_returntypes.hf")
 
-tokenizer = AutoTokenizer.from_pretrained("bigcode/santacoder", trust_remote_code=True)
-
-def preprocess_function(examples):
-    return tokenizer(examples['text'], truncation=True)
-
-tokenized_dataset = dataset.map(preprocess_function, batched=True)
-tokenizer.pad_token = tokenizer.eos_token
+tokenizer = RobertaTokenizer.from_pretrained("microsoft/codebert-base")
 
 for e in [1, 3, 5, 10]:
 
-    model = SantaCoderClassification()
+    model = RobertaForSequenceClassification.from_pretrained("microsoft/codebert-base", num_labels=len(selected_return_types))
     model.to(device)
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
+    def preprocess_function(examples):
+        return tokenizer(examples['text'], truncation=True)
+
+    tokenized_dataset = dataset.map(preprocess_function, batched=True)
+
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
     num_epochs = e
 
     training_args = TrainingArguments(
-        output_dir=f"model/santacoder-returntype-{num_epochs}",
+        output_dir=f"model/CodeBERT-returntype-{num_epochs}",
         learning_rate=2e-5,
         per_device_train_batch_size=32,
         per_device_eval_batch_size=32,
         num_train_epochs=num_epochs,
         weight_decay=0.01,
         save_total_limit = 3,
+        use_mps_device=True,
     )
 
     trainer = CustomTrainer(
