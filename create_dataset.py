@@ -2,29 +2,80 @@ from datasets import Dataset
 import json
 import json
 import glob
+import javalang
+from javalang.parser import JavaSyntaxError
 
-selected_return_types = ['None', 'number', 'boolean', 'string', 'object', 'collection']
+selected_return_types = ['None', 'Number', 'Boolean', 'String', 'Object', 'Collection'] # increasing complexity https://docs.oracle.com/javase/tutorial/java/nutsandbolts/datatypes.html
 
 def get_selected_return_type(s: str):
+    if s == None:
+        return 'None'
     s = s.lower()
     if s == 'void' or s == 'none':
         return 'None'
     if s == 'int' or s == 'float' or s == 'long' or s == 'double' or s == 'integer' or s == 'byte':
-        return 'number'
+        return 'Number'
     if s == 'boolean':
-        return 'boolean'
+        return 'Boolean'
     if s == 'string' or s == 'char':
-        return 'string'
-    if s == 'collection' or s == 'array' or s == 'list' or s == 'arraylist' or s == 'set' or s.endswith('[]'):
-        return 'collection'
-    return 'object'
+        return 'String'
+    if s == 'collection' or s == 'array' or s == 'list' or s == 'arraylist' or s == 'set' or s.endswith('[]') \
+        or s.startswith('collection<') or s.startswith('array<') or s.startswith('list<') or s.startswith('arraylist<') or s.startswith('set<'):
+        return 'Collection'
+    return 'Object'
+
+def getMethods(types_list):
+    results = []
+    
+    for t in types_list:
+        if type(t) == javalang.tree.MethodDeclaration:
+            if type(t.return_type) == type(None):
+                results.append((t.name, str(t.return_type)))
+            else:
+                results.append((t.name, str(t.return_type.name)))
+        if type(t) == javalang.tree.ClassDeclaration:
+            results += getMethods(t.body)
+    
+    return results
 
 def extract_return_type(code, method_name):
-    # NOTE: this breaks some special return types which contain spaces which are not coverred here
-    # example which will not work: Map<String, String>
-    code = code.replace('\t', ' ')
-    parts = code.split(' '+method_name+'(')[0].split(' ')
-    return parts[-1]
+    methods = []
+
+    code = code.replace('@Nullable ', '')
+    code = code.replace('@NonNull ', '')
+
+    try:
+
+        index_with_space = code.find(method_name+' (')
+        if index_with_space == -1:
+            index_with_space = math.inf
+        index_without_space = code.find(method_name+'(')
+        if index_without_space == -1:
+            index_without_space = math.inf
+        split_index = min(index_with_space, index_without_space)
+        if split_index == math.inf:
+            split_index = code.find(method_name)
+        previous_part = code[:split_index]
+        wrapped_code = "class Class {\n" + previous_part + " " + method_name + "(){};}"
+        tree = javalang.parse.parse(wrapped_code)
+        methods = getMethods(tree.types) # methods := [(method_name, returntype)]
+    except JavaSyntaxError as pe:
+        print(f"ParsingError in: {method_name} - {pe.description} - {pe.at}")
+        return None
+    except Exception as e:
+        print(f"ParsingError in: {method_name}, {e}")
+        return None
+    
+    if len(methods) == 0:
+        print(f"FOUND NO METHOD: {methods}")
+        return None
+
+    if len(methods) > 1:
+        for method in methods:
+            if method[0] == method_name:
+                return method[1]
+    return methods[0][1]
+
 
 def parse_files_into_dict(given_file_list):
     for file in given_file_list:
