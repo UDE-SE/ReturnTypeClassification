@@ -6,7 +6,7 @@
 3. Train models [BERTForReturnTypeClassification](train_BERTForReturnTypeClassification.py) and [CodeBERTForReturnTypeClassification](train_CodeBERTForReturnTypeClassification.py)
     
 ## Existing Models   
-1. Use trained models from HuggingFace [BERTForReturnTypeClassification](https://huggingface.co/UDE-SE/BERTForReturnTypeClassification) and [SantaCoderForReturnTypeClassification](https://huggingface.co/UDE-SE/CodeBERTForReturnTypeClassification)
+1. Use trained models from HuggingFace [BERTForReturnTypeClassification](https://huggingface.co/UDE-SE/BERTForReturnTypeClassification) and [CodeBERTForReturnTypeClassification](https://huggingface.co/UDE-SE/CodeBERTForReturnTypeClassification)
 
 ## Inference / Analysis
 1. Analyse single method names or existing repositories ([example how to use both models](https://huggingface.co/spaces/UDE-SE/ReturnTypePredictor/blob/main/app.py))
