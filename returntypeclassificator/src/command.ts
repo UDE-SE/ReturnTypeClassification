@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 //import * as fetch from 'node-fetch';
 const fetch = require('node-fetch');
+import {exec, spawn} from 'child_process'
+const fs = require('fs');
 
 function selectionText(editor: vscode.TextEditor, selection: vscode.Selection) {
     return editor.document.getText(selection);
@@ -8,13 +10,13 @@ function selectionText(editor: vscode.TextEditor, selection: vscode.Selection) {
 
 function confirm(message: string, options: string[]) {
     return new Promise((resolve, reject) => {
-        return vscode.window.showInformationMessage(message, ...options).then(resolve);
+        return vscode.window.showInformationMessage(message, { modal: true }, ...options).then(resolve);
     });
 }
 
 async function pred(data: any) {
 	const response = await fetch(
-		"https://api-inference.huggingface.co/models/UDE-SE/BERTForReturnTypeClassification",
+		"https://api-inference.huggingface.co/models/UDE-SE/CodeBERTForReturnTypeClassification",
 		{
 			headers: { Authorization: "Bearer XXX_TOKEN_XXX" },
             method: "POST",
@@ -25,7 +27,12 @@ async function pred(data: any) {
 	return result;
 }
 
-export let predDisposable = vscode.commands.registerCommand('returntypes-predictor.predict', async function () {    
+export let disposable = vscode.commands.registerCommand('returntypes-predictor.helloWorld', async function () {    
+
+    vscode.window.showInformationMessage('Hello there from returntypes predictor!');
+});
+
+export let predDisposable = vscode.commands.registerCommand('returntypes-predictor.predict', async function () {
     let editor = vscode.window.activeTextEditor;
     if (!editor) {
         return ''; // No open text editor
@@ -39,43 +46,37 @@ export let predDisposable = vscode.commands.registerCommand('returntypes-predict
 
     // predict
     let p = await pred({"inputs": methodName}).then((response: [[{ score: number; label: string; }]]) => {
-        console.log(JSON.stringify(response));
-        //vscode.window.showInformationMessage('Predict: ' + JSON.stringify(response));
         return response
     });
 
     // Error while model is not available {"error":"Model .../ReturnTypes-Predictor is currently loading","estimated_time":20}
     if (JSON.stringify(p).includes("is currently loading")) {
         vscode.window.showErrorMessage("The model is currently loading, please try again!")
-        return;
     }
 
-    if (JSON.stringify(p).includes("error")) {
-        vscode.window.showErrorMessage("The model is currently not available: "+JSON.stringify(p))
-        return;
-    }
+
 
     //convert labels to ['None', 'number', 'boolean', 'object', 'string', 'collection']
     var scores: number[] = [];
-    var labels: string[] = [];
+    var labels: string[] = []
 
     p[0].forEach((elem: { score: number; label: string; }) => {
         scores.push(elem.score);
         switch (elem.label) {
             case "LABEL_0":
-                labels.push("Object")
-                break;
-            case "LABEL_1":
                 labels.push("void")
                 break;
-            case "LABEL_2":
+            case "LABEL_1":
                 labels.push("int/float/double/Integer/Byte")
                 break;
-            case "LABEL_3":
+            case "LABEL_2":
                 labels.push("boolean")
                 break;
-            case "LABEL_4":
+            case "LABEL_3":
                 labels.push("String")
+                break;
+            case "LABEL_4":
+                labels.push("Object")
                 break;
             case "LABEL_5":
                 labels.push("Object[]")
@@ -85,35 +86,31 @@ export let predDisposable = vscode.commands.registerCommand('returntypes-predict
         }
     });
 
-    let index_of_max = scores.indexOf(Math.max(...scores));
-    let prediction = labels[index_of_max]
-    let pred_score = Math.round(scores[index_of_max] * 100)
+    const sortedByValue = scores.sort((a, b) => b - a);
+    const top3Indices = sortedByValue.map(value => scores.indexOf(value)).slice(0, 3)
+      
+    const options = top3Indices.map(index => `${labels[index]} (${Math.round(scores[index] * 100)}%)`);
 
-    //insert prediction into code
-    confirm("Shall the following predicted return type '"+prediction+"' ("+pred_score+" %) be inserted?", ["yes", "no"])
-        .then((option) => {
-            switch(option) {
-                case "yes":
-                    //vscode.window.showInformationMessage('YES: ' + methodName);
+    confirm("Shall one of the following predicted return types be inserted?", options
+    ).then((option) => {
+        switch (option) {
+            case options[0]:
+                editor?.insertSnippet(new vscode.SnippetString(options[0].split(' ')[0]+" "), selection.start);
+                break;
+            case options[1]:
+                editor?.insertSnippet(new vscode.SnippetString(options[1].split(' ')[0]+" "), selection.start);
+                break;
+            case options[2]:
+                editor?.insertSnippet(new vscode.SnippetString(options[2].split(' ')[0]+" "), selection.start);
+                break;
+        }
+    });
 
-                    editor?.insertSnippet(new vscode.SnippetString(prediction+" "), selection.start)
 
-                    break;
-                case "no":
-                    //vscode.window.showInformationMessage('NO: ' + methodName);
-                    break;
-            }
-        })
 
 });
 
 export let analyzeDisposable = vscode.commands.registerCommand('returntypes-predictor.analyze', async function () {
-    vscode.window.showInformationMessage('Analysing...');
-    
-    const methodRegex = /(?:public|private|protected)?\s+(?:static\s+)?(\w+(?:<\w+>)?)\s+(\w+)\s*\([^\)]*\)\s*(?:throws\s+\w+(?:\s*,\s*\w+)*)?\s*\{/g;
-    const methodInfos: { name: string, returnType: string, returnTypeGroup: string}[] = [];
-    
-    let match: RegExpExecArray | null;
 
     let editor = vscode.window.activeTextEditor;
     if (!editor) {
@@ -122,123 +119,187 @@ export let analyzeDisposable = vscode.commands.registerCommand('returntypes-pred
 
     let text = editor.document.getText();
 
-    while ((match = methodRegex.exec(text)) !== null) {
-        let returnType = match[1];
-        let returnTypeGroup: string;
+    const temp_filePath =  __dirname + '/currentFile.java';
 
-        switch (returnType.toLowerCase()) {
-            case 'void':
-            case 'none':
-                returnTypeGroup = 'None';
-                break;
-            case 'int':
-            case 'float':
-            case 'long':
-            case 'double':
-            case 'integer':
-            case 'byte':
-                returnTypeGroup = 'number';
-                break;
-            case 'boolean':
-                returnTypeGroup = 'boolean';
-                break;
-            case 'string':
-            case 'char':
-                returnTypeGroup = 'string';
-                break;
-            case 'collection':
-            case 'array':
-            case 'list':
-            case 'arraylist':
-            case 'set':
-                returnTypeGroup = 'collection';
-                break;
-            default:
-                returnTypeGroup = 'object';
-
-        }
-
-        methodInfos.push({ name: match[2], returnType: returnType, returnTypeGroup: returnTypeGroup});
+    // Write to the file
+    fs.writeFile(temp_filePath, text, (err: any) => {
+    if (err) {
+        console.error('Error writing to file:', err);
+    } else {
+        console.log('Content has been written to the file successfully!');
     }
+    });
 
-    var analyze_score = 0;
+    let filepath = __dirname + '/script.py'
 
-    for (const methodinfo of methodInfos) {
-        let given_return_type_group = methodinfo['returnTypeGroup'];
-        let method_name = methodinfo['name'];
+    const command = 'python3 '+filepath;
 
-        // predict
-        let p = await pred({"inputs": method_name}).then((response: [[{ score: number; label: string; }]]) => {
-            //console.log(JSON.stringify(response));
-            //vscode.window.showInformationMessage('Predict: ' + JSON.stringify(response));
-            return response
-        });
+    const childProcess = spawn(command, { shell: true });
 
-        // Error while model is not available {"error":"Model .../ReturnTypes-Predictor is currently loading","estimated_time":20}
-        if (JSON.stringify(p).includes("is currently loading")) {
-            vscode.window.showErrorMessage("The model is currently loading, please try again!\n ErrorMessage: "+JSON.stringify(p))
-            break;
-        }
-        else if (JSON.stringify(p).includes("error")) {
-                vscode.window.showErrorMessage("The model is currently not available: "+JSON.stringify(p))
-                return;
-            }
-            else {
+    // Capture the output of the command
+    let commandOutput = '';
 
-                var scores: number[] = [];
-                var labels: string[] = [];
+    childProcess.stdout.on('data', (data) => {
+        commandOutput += data.toString();
+    });
 
-                p[0].forEach((elem: { score: number; label: string; }) => {
-                    scores.push(elem.score);
-                    switch (elem.label) {
-                        case "LABEL_0":
-                            labels.push("object")
+    childProcess.stderr.on('data', (data) => {
+        console.error(`Error: ${data}`);
+    });
+
+    childProcess.on('close', async (code) => {
+        console.log(`Command exited with code ${code}`);
+    
+        if (code === 0) {
+            // Parse the output as JSON
+            try {
+                console.log('commandOutput: '+commandOutput);
+                const lines = commandOutput.split('\n')
+                const lastLine = lines[lines.length - 2];
+
+                const resultDictionary = JSON.parse(lastLine);
+
+                var counter = 0;
+
+                const methodInfos: { name: string, returnType: string, returnTypeGroup: string}[] = [];
+
+                Object.entries(resultDictionary).forEach(([key, value]) => {
+                    counter += 1;
+
+                    let returnTypeGroup: string;
+                    
+                    switch (String(value).toLowerCase()) {
+                        case 'void':
+                        case 'none':
+                            returnTypeGroup = 'None';
                             break;
-                        case "LABEL_1":
-                            labels.push("None")
+                        case 'int':
+                        case 'float':
+                        case 'long':
+                        case 'double':
+                        case 'integer':
+                        case 'byte':
+                            returnTypeGroup = 'Number';
                             break;
-                        case "LABEL_2":
-                            labels.push("number")
+                        case 'boolean':
+                            returnTypeGroup = 'Boolean';
                             break;
-                        case "LABEL_3":
-                            labels.push("boolean")
+                        case 'string':
+                        case 'char':
+                            returnTypeGroup = 'String';
                             break;
-                        case "LABEL_4":
-                            labels.push("string")
-                            break;
-                        case "LABEL_5":
-                            labels.push("collection")
+                        case 'collection':
+                        case 'array':
+                        case 'list':
+                        case 'arraylist':
+                        case 'set':
+                            returnTypeGroup = 'Collection';
                             break;
                         default:
-                            break;
+                            returnTypeGroup = 'Object';
+            
                     }
-            });
 
-            let index_of_max = scores.indexOf(Math.max(...scores));
-            let prediction = labels[index_of_max];
-            let pred_score = Math.round(scores[index_of_max] * 100);
+                    methodInfos.push({ name: key, returnType: String(value), returnTypeGroup: returnTypeGroup});
 
-            console.log('method name', method_name);
-            console.log('prediction', prediction, pred_score);
-            console.log('given', given_return_type_group);
+                });
 
-            if (prediction == given_return_type_group) {
-                analyze_score += 1;
+
+                var analyze_score = 0;
+
+                var wrong_classifications = [];
+                var successful_analyze = true;
+
+                for (const methodinfo of methodInfos) {
+                    let given_return_type_group = methodinfo['returnTypeGroup'];
+                    let method_name = methodinfo['name'];
+
+                    // predict
+                    let p = await pred({"inputs": method_name}).then((response: [[{ score: number; label: string; }]]) => {
+                        return response
+                    });
+
+                    // Error while model is not available {"error":"Model .../ReturnTypes-Predictor is currently loading","estimated_time":20}
+                    if (JSON.stringify(p).includes("is currently loading")) {
+                        vscode.window.showErrorMessage("The model is currently loading, please try again!\n ErrorMessage: "+JSON.stringify(p))
+                        successful_analyze = false;
+                        break;
+                    }
+                    else {
+
+                        var scores: number[] = [];
+                        var labels: string[] = [];
+
+                        p[0].forEach((elem: { score: number; label: string; }) => {
+                            scores.push(elem.score);
+                            switch (elem.label) {
+                                case "LABEL_0":
+                                    labels.push("None")
+                                    break;
+                                case "LABEL_1":
+                                    labels.push("Number")
+                                    break;
+                                case "LABEL_2":
+                                    labels.push("Boolean")
+                                    break;
+                                case "LABEL_3":
+                                    labels.push("String")
+                                    break;
+                                case "LABEL_4":
+                                    labels.push("Object")
+                                    break;
+                                case "LABEL_5":
+                                    labels.push("Collection")
+                                    break;
+                                default:
+                                    break;
+                            }
+                        });
+                        const sortedByValue = scores.sort((a, b) => b - a);
+                        const topIndices = sortedByValue.map(value => scores.indexOf(value))
+                            
+                        const options = topIndices.map(index => `${labels[index]} (${Math.round(scores[index] * 100)}%) `);
+
+                        if (options[0].split(' ')[0] == given_return_type_group) {
+                            analyze_score += 1;
+                        }
+
+                        else {
+                            wrong_classifications.push([method_name, given_return_type_group, options])
+                        }
+
+                    }
+
+
+                };
+                if (successful_analyze == true) {
+                    console.log('analyze score', analyze_score);
+                    console.log('total ammount', methodInfos.length)
+
+                    var message_text = "";
+                    for (let w_c of wrong_classifications) {
+                        message_text = message_text + `method_name: ${w_c[0]}\ngiven: ${w_c[1]}\nprediction: ${w_c[2]}\n\n`
+                    }
+
+                    vscode.window.showInformationMessage(`${analyze_score} out of ${methodInfos.length} return types are classfied correct.\nThe missclassified methods are listed in console.`, { modal: true });
+                    // vscode.window.showInformationMessage(`The following methods are classified wrong:\n${message_text}`);
+                    console.log(message_text)
+                }
+
+
+
+            } catch (error) {
+                console.error('Error parsing JSON:', error);
             }
-
+        } else {
+            console.error('Command failed');
         }
-
-
-    };
-
-    console.log('analyze score', analyze_score);
-    console.log('total ammount', methodInfos.length)
-
-    vscode.window.showInformationMessage(analyze_score+' out of '+methodInfos.length+' return types are classfied correct.');
+    });
 
 });
 
 module.exports = {
+    disposable,
     predDisposable,
     analyzeDisposable
 }

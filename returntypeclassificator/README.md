@@ -1,6 +1,6 @@
-# returntypeclassificator README - inital / not updated
+# returntypes-predictor README
 
-This is the README for your extension "returntypeclassificator". After writing up a brief description, we recommend including the following sections.
+This is the README for your extension "returntypes-predictor". After writing up a brief description, we recommend including the following sections.
 
 ## Features
 

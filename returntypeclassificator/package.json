@@ -1,18 +1,26 @@
 {
-  "name": "returntypeclassificator",
-  "displayName": "ReturnTypeClassificator",
-  "description": "Classify the return type of java methods",
+  "name": "returntypes-predictor",
+  "displayName": "returntypes-predictor",
+  "description": "",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.82.0"
+    "vscode": "^1.75.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:returntypes-predictor.helloWorld",
+    "onCommand:returntypes-predictor.predict",
+    "onCommand:returntypes-predictor.analyze"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "returntypes-predictor.helloWorld",
+        "title": "Hello World"
+      },
       {
         "command": "returntypes-predictor.predict",
         "title": "Predict returntypes"
@@ -20,6 +28,14 @@
       {
         "command": "returntypes-predictor.analyze",
         "title": "Analyze returntypes"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "returntypes-predictor.predict",
+        "key": "ctrl+shift+alt+r",
+        "mac": "cmd+shift+alt+r",
+        "when": "editorHasSelection"
       }
     ]
   },
@@ -32,19 +48,22 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
+    "@types/glob": "^8.0.0",
     "@types/mocha": "^10.0.1",
-    "@types/node": "16.x",
-    "@types/vscode": "^1.82.0",
-    "@typescript-eslint/eslint-plugin": "^6.4.1",
-    "@typescript-eslint/parser": "^6.4.1",
-    "@vscode/test-electron": "^2.3.4",
-    "eslint": "^8.47.0",
-    "glob": "^10.3.3",
-    "mocha": "^10.2.0",
-    "typescript": "^5.1.6"
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "@vscode/test-electron": "^2.2.0",
+    "antlr4ts-cli": "^0.5.0-alpha.4",
+    "eslint": "^8.28.0",
+    "glob": "^8.0.3",
+    "mocha": "^10.1.0",
+    "typescript": "^4.9.3"
   },
   "dependencies": {
     "@types/node": "^18.13.0",
-    "node-fetch": "^2.7.0"
+    "antlr4ts": "^0.5.0-alpha.4",
+    "node-fetch": "^2.6.6",
+    "onnxjs": "^0.1.8"
   }
 }
